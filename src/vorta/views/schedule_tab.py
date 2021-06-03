@@ -1,7 +1,7 @@
 from PyQt5 import uic, QtCore
 from PyQt5.QtWidgets import QListWidgetItem, QApplication, QTableView, QHeaderView, QTableWidgetItem
 from vorta.utils import get_asset, get_sorted_wifis
-from vorta.models import EventLogModel, WifiSettingModel, BackupProfileMixin
+from vorta.models import EventLogModel, WifiSettingModel, BackupProfileMixin, BackupProfileModel
 from vorta.views.utils import get_colored_icon
 
 uifile = get_asset('UI/scheduletab.ui')
@@ -44,7 +44,26 @@ class ScheduleTab(ScheduleBase, ScheduleUI, BackupProfileMixin):
         self.set_icons()
 
         # Connect events
-        self.scheduleApplyButton.clicked.connect(self.on_scheduler_apply)
+
+        # prune old
+        self.pruneCheckBox.stateChanged.connect(self.update_prune)
+
+        # validate repository
+        self.validationSpinBox.valueChanged.connect(self.update_validation_value)
+        self.validationCheckBox.stateChanged.connect(self.update_validation_check)
+
+        # backup manually (off)
+        self.scheduleOffRadio.toggled.connect(self.update_manually)
+
+        # backup every (interval)
+        self.scheduleIntervalRadio.toggled.connect(self.update_interval_button)
+        self.scheduleIntervalHours.valueChanged.connect(self.update_interval_hours)
+        self.scheduleIntervalMinutes.valueChanged.connect(self.update_interval_minutes)
+
+        # backup daily (fixed)
+        self.scheduleFixedRadio.toggled.connect(self.update_fixed_button)
+        self.scheduleFixedTime.timeChanged.connect(self.update_fixed_time)
+
         self.app.backup_finished_event.connect(self.populate_logs)
         self.dontRunOnMeteredNetworksCheckBox.stateChanged.connect(
             lambda new_val, attr='dont_run_on_metered_networks': self.save_profile_attr(attr, new_val))
@@ -125,8 +144,8 @@ class ScheduleTab(ScheduleBase, ScheduleUI, BackupProfileMixin):
         event_logs = [s for s in EventLogModel.select().order_by(EventLogModel.start_time.desc())]
 
         sorting = self.logTableWidget.isSortingEnabled()
-        self.logTableWidget.setSortingEnabled(False)        # disable sorting while modifying the table.
-        self.logTableWidget.setRowCount(len(event_logs))    # go ahead and set table length and then update the rows
+        self.logTableWidget.setSortingEnabled(False)  # disable sorting while modifying the table.
+        self.logTableWidget.setRowCount(len(event_logs))  # go ahead and set table length and then update the rows
         for row, log_line in enumerate(event_logs):
             formatted_time = log_line.start_time.strftime('%Y-%m-%d %H:%M')
             self.logTableWidget.setItem(row, LogTableColumn.Time, QTableWidgetItem(formatted_time))
@@ -134,28 +153,77 @@ class ScheduleTab(ScheduleBase, ScheduleUI, BackupProfileMixin):
             self.logTableWidget.setItem(row, LogTableColumn.Subcommand, QTableWidgetItem(log_line.subcommand))
             self.logTableWidget.setItem(row, LogTableColumn.Repository, QTableWidgetItem(log_line.repo_url))
             self.logTableWidget.setItem(row, LogTableColumn.ReturnCode, QTableWidgetItem(str(log_line.returncode)))
-        self.logTableWidget.setSortingEnabled(sorting)      # restore sorting now that modifications are done
+        self.logTableWidget.setSortingEnabled(sorting)  # restore sorting now that modifications are done
 
     def _draw_next_scheduled_backup(self):
         self.nextBackupDateTimeLabel.setText(self.app.scheduler.next_job_for_profile(self.profile().id))
         self.nextBackupDateTimeLabel.repaint()
 
-    def on_scheduler_apply(self):
-        profile = self.profile()
-
-        # Save checking options
-        profile.validation_weeks = self.validationSpinBox.value()
-        profile.validation_on = self.validationCheckBox.isChecked()
+    def update_prune(self):
+        # update prune option.
+        profile = BackupProfileModel.get(id=self.window().current_profile.id)
         profile.prune_on = self.pruneCheckBox.isChecked()
+        profile.save()
 
-        # Save scheduler timing and activate if needed.
-        for label, obj in self.schedulerRadioMapping.items():
-            if obj.isChecked():
-                profile.schedule_mode = label
-                profile.schedule_interval_hours = self.scheduleIntervalHours.value()
-                profile.schedule_interval_minutes = self.scheduleIntervalMinutes.value()
-                qtime = self.scheduleFixedTime.time()
-                profile.schedule_fixed_hour, profile.schedule_fixed_minute = qtime.hour(), qtime.minute()
-                profile.save()
-                self.app.scheduler.reload()
-                self._draw_next_scheduled_backup()
+    def update_validation_check(self):
+        # update check value of "validate repository data" option
+        profile = BackupProfileModel.get(id=self.window().current_profile.id)
+        profile.validation_on = self.validationCheckBox.isChecked()
+        profile.save()
+
+    def update_validation_value(self):
+        # update value of "validate repository data" option
+        profile = BackupProfileModel.get(id=self.window().current_profile.id)
+        profile.validation_weeks = self.validationSpinBox.value()
+        profile.save()
+
+    def update_manually(self):
+        # update manually option
+        profile = BackupProfileModel.get(id=self.window().current_profile.id)
+        if self.scheduleOffRadio.isChecked():
+            profile.schedule_mode = 'off'
+            profile.save()
+            self.app.scheduler.reload()
+            self._draw_next_scheduled_backup()
+
+    def update_interval_button(self):
+        # update "backup every" option
+        profile = BackupProfileModel.get(id=self.window().current_profile.id)
+        label = 'interval'
+        profile.schedule_mode = label
+        profile.save()
+        self.app.scheduler.reload()
+        self._draw_next_scheduled_backup()
+
+    def update_interval_hours(self):
+        # update "backup every" option
+        profile = BackupProfileModel.get(id=self.window().current_profile.id)
+        profile.schedule_interval_hours = self.scheduleIntervalHours.value()
+        profile.save()
+        self.app.scheduler.reload()
+        self._draw_next_scheduled_backup()
+
+    def update_interval_minutes(self):
+        # update "backup every" option
+        profile = BackupProfileModel.get(id=self.window().current_profile.id)
+        profile.schedule_interval_minutes = self.scheduleIntervalMinutes.value()
+        profile.save()
+        self.app.scheduler.reload()
+        self._draw_next_scheduled_backup()
+
+    def update_fixed_button(self):
+        # update daily option
+        profile = BackupProfileModel.get(id=self.window().current_profile.id)
+        profile.schedule_mode = 'fixed'
+        profile.save()
+        self.app.scheduler.reload()
+        self._draw_next_scheduled_backup()
+
+    def update_fixed_time(self):
+        # update daily option value
+        profile = BackupProfileModel.get(id=self.window().current_profile.id)
+        qtime = self.scheduleFixedTime.time()
+        profile.schedule_fixed_hour, profile.schedule_fixed_minute = qtime.hour(), qtime.minute()
+        profile.save()
+        self.app.scheduler.reload()
+        self._draw_next_scheduled_backup()
