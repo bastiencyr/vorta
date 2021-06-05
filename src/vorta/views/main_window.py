@@ -7,10 +7,10 @@ from PyQt5.QtWidgets import QShortcut, QMessageBox, QCheckBox, QMenu, QToolTip, 
 
 from vorta.borg.borg_thread import BorgThread
 from vorta.models import BackupProfileModel, SettingsModel
+from vorta.profile_export import ProfileExport
 from vorta.utils import borg_compat, get_asset, is_system_tray_available, get_network_status_monitor
 from vorta.views.partials.loading_button import LoadingButton
 from vorta.views.utils import get_colored_icon
-from vorta.profile_export import ProfileExport
 from .archive_tab import ArchiveTab
 from .export_window import ExportWindow
 from .import_window import ImportWindow
@@ -19,7 +19,6 @@ from .profile_add_edit_dialog import AddProfileWindow, EditProfileWindow
 from .repo_tab import RepoTab
 from .schedule_tab import ScheduleTab
 from .source_tab import SourceTab
-
 
 uifile = get_asset('UI/mainwindow.ui')
 MainWindowUI, MainWindowBase = uic.loadUiType(uifile)
@@ -108,7 +107,7 @@ class MainWindow(MainWindowBase, MainWindowUI):
             self.scheduleTab.wifiListLabel.hide()
             self.scheduleTab.wifiListWidget.hide()
             self.scheduleTab.page_2.hide()
-            self.scheduleTab.toolBox.removeItem(1)
+            self.scheduleTab.toolBox.setTabVisible(1, False)
 
         # Connect to existing thread.
         if BorgThread.is_running():
