@@ -107,7 +107,7 @@ class MainWindow(MainWindowBase, MainWindowUI):
             self.scheduleTab.wifiListLabel.hide()
             self.scheduleTab.wifiListWidget.hide()
             self.scheduleTab.page_2.hide()
-            self.scheduleTab.toolBox.setTabVisible(1, False)
+            self.scheduleTab.scheduleTabWidget.setTabVisible(1, False)
 
         # Connect to existing thread.
         if BorgThread.is_running():
